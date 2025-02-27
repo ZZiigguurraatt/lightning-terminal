@@ -5,58 +5,48 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Tests",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "${workspaceRoot}/app/node_modules/.bin/react-scripts",
-      "args": ["test", "--runInBand", "--no-cache", "--watchAll=false"],
-      "cwd": "${workspaceRoot}/app/",
-      "protocol": "inspector",
-      "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen",
-      "env": { "CI": "true" },
-      "disableOptimisticBPs": true
-    },
-
-
-    {
-      "name": "test_custom_channels",
+      "name": "Debug itest",
       "type": "go",
       "request": "launch",
       "mode": "test",
+      "preLaunchTask": "reset before itest",
       "program": "${workspaceFolder}/itest",
-      "args": [
-              "-test.v",
-              "-test.run=TestLightningTerminal/test_custom_channels",
-              "-loglevel=trace",
-              "-btcdexec=./btcd-itest",
-              "-litdexec=./litd-itest",
-              "-logdir=regtest",
-      ],
       "env": {
               "GOEXPERIMENT": "loopvar",
               "GO111MODULE": "on"
       },
+      "args": [
+        "-test.v",
+        "-test.run=TestLightningTerminal/test_custom_channels",
+        "-loglevel=trace",
+        "-btcdexec=./btcd-itest",
+        "-logdir=${workspaceFolder}/itest/.logs",
+        "-litdexec=${workspaceFolder}/itest/litd-itest",
+      ],
       "buildFlags": [
-              "-tags=dev monitoring autopilotrpc chainrpc invoicesrpc peersrpc routerrpc signrpc verrpc walletrpc watchtowerrpc wtclientrpc integration itest btcd",
+              "-tags=dev integration itest autopilotrpc routerrpc signrpc verrpc walletrpc chainrpc invoicesrpc watchtowerrpc wtclientrpc peersrpc btcd monitoring",
       ],
       "hideSystemGoroutines": true,
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    },
+    {
+      "name": "Debug Tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${workspaceRoot}/app/node_modules/.bin/react-scripts",
+      "args": [
+        "test",
+        "--runInBand",
+        "--no-cache",
+        "--watchAll=false"
+      ],
+      "cwd": "${workspaceRoot}/app/",
+      "protocol": "inspector",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "CI": "true"
+      },
+      "disableOptimisticBPs": true
+    }
   ]
 }
