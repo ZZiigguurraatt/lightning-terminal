@@ -16,6 +16,47 @@
       "internalConsoleOptions": "neverOpen",
       "env": { "CI": "true" },
       "disableOptimisticBPs": true
-    }
+    },
+
+
+    {
+      "name": "test_custom_channels",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/itest",
+      "args": [
+              "-test.v",
+              "-test.run=TestLightningTerminal/test_custom_channels",
+              "-loglevel=trace",
+              "-btcdexec=./btcd-itest",
+              "-litdexec=./litd-itest",
+              "-logdir=regtest",
+      ],
+      "env": {
+              "GOEXPERIMENT": "loopvar",
+              "GO111MODULE": "on"
+      },
+      "buildFlags": [
+              "-tags=dev monitoring autopilotrpc chainrpc invoicesrpc peersrpc routerrpc signrpc verrpc walletrpc watchtowerrpc wtclientrpc integration itest btcd",
+      ],
+      "hideSystemGoroutines": true,
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   ]
 }
