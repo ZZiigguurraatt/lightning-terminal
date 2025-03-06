@@ -2103,13 +2103,16 @@ func testCustomChannelsLiquidityEdgeCases(ctx context.Context,
 					AssetId: assetID,
 				},
 			},
-			PaymentMaxAmt:  180_000_000,
+			// PaymentMaxAmt:  180_000_000,
 			Expiry:         uint64(inOneHour.Unix()),
 			PeerPubKey:     dave.PubKey[:],
 			TimeoutSeconds: 100,
 		},
 	)
 	require.NoError(t.t, err)
+
+	t.Logf("rfq AddAssetSellOrderResponse:\n%v", toProtoJSON(t.t, resQ))
+
 
 	// We now create a hodl invoice on Fabia, for 10k assets.
 	hodlInv := createAssetHodlInvoice(t.t, erin, fabia, 10_000, assetID)
