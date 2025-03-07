@@ -2081,10 +2081,7 @@ func testCustomChannelsLiquidityEdgeCases(ctx context.Context,
 		),
 	)
 
-	// Edge case: Check if the RFQ HTLC tracking accounts for cancelled
-	// HTLCs. We achieve this by manually creating & using an RFQ quote with
-	// a set max amount. We first pay to a hodl invoice that we eventually
-	// cancel, then pay to a normal invoice which should succeed.
+	// Edge case: Check if a quote that is too low errors informatively.
 
 	// We start by sloshing some funds in the Erin<->Fabia.
 	sendAssetKeySendPayment(
@@ -2093,8 +2090,7 @@ func testCustomChannelsLiquidityEdgeCases(ctx context.Context,
 
 	logBalance(t.t, nodes, assetID, "balance after 1st slosh")
 
-	// We create the RFQ order. We set the max amt to ~180k sats which is
-	// going to evaluate to about 10k assets.
+	// We create the RFQ order.
 	inOneHour := time.Now().Add(time.Hour)
 	resQ, err := charlieTap.RfqClient.AddAssetSellOrder(
 		ctx, &rfqrpc.AddAssetSellOrderRequest{
@@ -2103,7 +2099,7 @@ func testCustomChannelsLiquidityEdgeCases(ctx context.Context,
 					AssetId: assetID,
 				},
 			},
-			PaymentMaxAmt:  180_000_000,
+			PaymentMaxAmt:  18_000_000,
 			Expiry:         uint64(inOneHour.Unix()),
 			PeerPubKey:     dave.PubKey[:],
 			TimeoutSeconds: 100,
@@ -2111,54 +2107,20 @@ func testCustomChannelsLiquidityEdgeCases(ctx context.Context,
 	)
 	require.NoError(t.t, err)
 
-	// We now create a hodl invoice on Fabia, for 10k assets.
-	hodlInv := createAssetHodlInvoice(t.t, erin, fabia, 10_000, assetID)
+	t.Logf("rfq AddAssetSellOrderResponse:\n%v", toProtoJSON(t.t, resQ))
 
 	// Charlie tries to pay via Dave, by providing the RFQ quote ID that was
 	// manually created above.
 	var quoteID rfqmsg.ID
 	copy(quoteID[:], resQ.GetAcceptedQuote().Id)
-	payInvoiceWithAssets(
-		t.t, charlie, dave, hodlInv.payReq, assetID, withSmallShards(),
-		withFailure(lnrpc.Payment_IN_FLIGHT, failureNone),
-		withRFQ(quoteID),
-	)
-
-	// We now assert that the expected numbers of HTLCs are present on each
-	// node.
-	// Reminder, topology looks like this:
-	//
-	// Charlie <-> Dave <-> Erin <-> Fabia
-	//
-	// Therefore the routing nodes should have double the number of HTLCs
-	// required for the payment present.
-	assertNumHtlcs(t.t, charlie, 3)
-	assertNumHtlcs(t.t, dave, 6)
-	assertNumHtlcs(t.t, erin, 6)
-	assertNumHtlcs(t.t, fabia, 3)
-
-	// Now let's cancel the invoice on Fabia.
-	payHash := hodlInv.preimage.Hash()
-	_, err = fabia.InvoicesClient.CancelInvoice(
-		ctx, &invoicesrpc.CancelInvoiceMsg{
-			PaymentHash: payHash[:],
-		},
-	)
-	require.NoError(t.t, err)
-
-	// There should be no HTLCs present on any channel.
-	assertNumHtlcs(t.t, charlie, 0)
-	assertNumHtlcs(t.t, dave, 0)
-	assertNumHtlcs(t.t, erin, 0)
-	assertNumHtlcs(t.t, fabia, 0)
 
 	// Now Fabia creates the normal invoice.
 	invoiceResp = createAssetInvoice(
 		t.t, erin, fabia, 10_000, assetID,
 	)
 
-	// Now Charlie pays the invoice, again by using the manually specified
-	// RFQ quote ID. This payment should succeed.
+	// Now Charlie pays the invoice by using the manually specified
+	// RFQ quote ID.
 	payInvoiceWithAssets(
 		t.t, charlie, dave, invoiceResp.PaymentRequest, assetID,
 		withSmallShards(), withRFQ(quoteID),
