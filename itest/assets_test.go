@@ -321,6 +321,142 @@ func createTestMultiRFQAssetNetwork(t *harnessTest, net *NetworkHarness,
 	return nil, nil, nil
 }
 
+
+
+
+
+
+
+
+
+func createMiniTestAssetNetwork(t *harnessTest, net *NetworkHarness,
+	daveTap, erinTap, fabiaTap, universeTap *tapClient,
+	mintedAsset *taprpc.Asset, assetSendAmount,
+	erinFundingAmount uint64, pushSat int64) (*lnrpc.ChannelPoint, *lnrpc.ChannelPoint) {
+
+	ctxb := context.Background()
+	assetID := mintedAsset.AssetGenesis.AssetId
+	var groupKey []byte
+	if mintedAsset.AssetGroup != nil {
+		groupKey = mintedAsset.AssetGroup.TweakedGroupKey
+	}
+
+	fundingScriptTree := tapscript.NewChannelFundingScriptTree()
+	fundingScriptKey := fundingScriptTree.TaprootKey
+	fundingScriptKeyBytes := fundingScriptKey.SerializeCompressed()
+
+
+
+	
+	
+	t.Logf("Opening asset channels...")
+
+	fundRespEF, err := erinTap.FundChannel(
+		ctxb, &tchrpc.FundChannelRequest{
+			AssetAmount:        erinFundingAmount,
+			AssetId:            assetID,
+			PeerPubkey:         fabiaTap.node.PubKey[:],
+			FeeRateSatPerVbyte: 5,
+			PushSat:            pushSat,
+		},
+	)
+	require.NoError(t.t, err)
+	t.Logf("Funded channel between Erin and Fabia: %v", fundRespEF)
+
+
+
+	assertPendingChannels(
+		t.t, erinTap.node, mintedAsset, 1, erinFundingAmount, 0,
+	)
+
+	// Now that we've looked at the pending channels, let's actually confirm
+	// all 1 of them.
+	mineBlocks(t, net, 6, 1)
+
+
+
+
+	fundRespEF2, err := erinTap.FundChannel(
+		ctxb, &tchrpc.FundChannelRequest{
+			AssetAmount:        erinFundingAmount,
+			AssetId:            assetID,
+			PeerPubkey:         fabiaTap.node.PubKey[:],
+			FeeRateSatPerVbyte: 5,
+			PushSat:            pushSat,
+		},
+	)
+	require.NoError(t.t, err)
+	t.Logf("Funded a second channel between Erin and Fabia: %v", fundRespEF2)
+
+
+
+
+
+
+	assertPendingChannels(
+		t.t, erinTap.node, mintedAsset, 1, erinFundingAmount, 0,
+	)
+
+	// Now that we've looked at the pending channels, let's actually confirm
+	// all 1 of them.
+	mineBlocks(t, net, 6, 1)
+
+
+	// Assert that the proofs for both channels has been uploaded to the
+	// designated Universe server.
+
+	
+	assertUniverseProofExists(
+		t.t, universeTap, assetID, groupKey, fundingScriptKeyBytes,
+		fmt.Sprintf("%v:%v", fundRespEF.Txid, fundRespEF.OutputIndex),
+	)
+
+
+	assertUniverseProofExists(
+		t.t, universeTap, assetID, groupKey, fundingScriptKeyBytes,
+		fmt.Sprintf("%v:%v", fundRespEF2.Txid, fundRespEF2.OutputIndex),
+	)
+
+
+// does not work with multiple channels per peer
+	// assertAssetChan(
+	// 	t.t, erinTap.node, fabiaTap.node, erinFundingAmount,
+	// 	[]*taprpc.Asset{mintedAsset},
+	// )
+
+
+	
+	chanPointEF := &lnrpc.ChannelPoint{
+		OutputIndex: uint32(fundRespEF.OutputIndex),
+		FundingTxid: &lnrpc.ChannelPoint_FundingTxidStr{
+			FundingTxidStr: fundRespEF.Txid,
+		},
+	}
+
+
+
+
+	chanPointEF2 := &lnrpc.ChannelPoint{
+		OutputIndex: uint32(fundRespEF2.OutputIndex),
+		FundingTxid: &lnrpc.ChannelPoint_FundingTxidStr{
+			FundingTxidStr: fundRespEF2.Txid,
+		},
+	}
+
+
+
+
+
+	return chanPointEF, chanPointEF2
+}
+
+
+
+
+
+
+
+
 // createTestAssetNetwork sends asset funds from Charlie to Dave and Erin, so
 // they can fund asset channels with Yara and Fabia, respectively. So the asset
 // channels created are Charlie->Dave, Dave->Yara, Erin->Fabia. The channels
@@ -1465,7 +1601,7 @@ func payPayReqWithSatoshi(t *testing.T, payer *HarnessNode, payReq string,
 	}
 
 	if cfg.smallShards {
-		sendReq.MaxShardSizeMsat = 80_000_000
+		sendReq.MaxShardSizeMsat = 40_000_000
 	}
 
 	stream, err := payer.RouterClient.SendPaymentV2(ctxt, sendReq)

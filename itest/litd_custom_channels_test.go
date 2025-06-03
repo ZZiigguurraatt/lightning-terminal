@@ -49,7 +49,7 @@ var (
 		AssetType: taprpc.AssetType_NORMAL,
 		Name:      "itest-asset-cents",
 		AssetMeta: dummyMetaData,
-		Amount:    1_000_000,
+		Amount:    20_000_000,
 	}
 
 	shortTimeout = time.Second * 5
@@ -93,14 +93,179 @@ var (
 			"use_mock_price_oracle_service_promise_to_" +
 			"not_use_on_mainnet",
 		"--taproot-assets.experimental.rfq.mockoracleassetsperbtc=" +
-			"5820600",
+
+			// works without manual sharding
+			// "10000000000",
+
+
+			// works with manual sharding
+			"9852216748",
 	}...)
 )
 
 const (
-	fundingAmount = 50_000
+	fundingAmount = 5_000_000
 	startAmount   = fundingAmount * 2
 )
+
+
+
+
+
+
+func testSharding(ctx context.Context, net *NetworkHarness,
+	t *harnessTest) {
+
+	lndArgs := slices.Clone(lndArgsTemplate)
+	litdArgs := slices.Clone(litdArgsTemplate)
+
+	// We use erin as the proof courier.
+	erinPort := port.NextAvailablePort()
+	litdArgs = append(litdArgs, fmt.Sprintf(
+		"--taproot-assets.proofcourieraddr=%s://%s",
+		proof.UniverseRpcCourierType,
+		fmt.Sprintf(node.ListenerFormat, erinPort),
+	))
+
+	// The topology we are going for looks like the following:
+	//
+	// Dave  --[sats]-->  Erin  --[assets]-->  Fabia
+	//                      |                    ^
+	//                      |                    |
+	//                       -----[assets]-------
+	//
+	// With [assets] being a custom channel and [sats] being a normal, BTC
+	// only channel.
+
+	
+	dave, err := net.NewNode(t.t, "Dave", lndArgs, false, true, litdArgs...)
+	require.NoError(t.t, err)
+	erin, err := net.NewNodeWithPort(t.t, "Erin", lndArgs, false, true, erinPort, litdArgs...,)
+	require.NoError(t.t, err)
+	fabia, err := net.NewNode(
+		t.t, "Fabia", lndArgs, false, true, litdArgs...,
+	)
+	require.NoError(t.t, err)
+
+
+	nodes := []*HarnessNode{dave, erin, fabia}
+	connectAllNodes(t.t, net, nodes)
+	fundAllNodes(t.t, net, nodes)
+
+	// Create the normal channel between Dave and Erin.
+	t.Logf("Opening normal channel between Dave and Erin...")
+	channelOp := openChannelAndAssert(
+		t, net, dave, erin, lntest.OpenChannelParams{
+			Amt:         5_000_000,
+			SatPerVByte: 5,
+		},
+	)
+	defer closeChannelAndAssert(t, net, dave, channelOp, false)
+
+	// This is the only public channel, we need everyone to be aware of it.
+	assertChannelKnown(t.t, fabia, channelOp)
+
+	universeTap := newTapClient(t.t, erin)
+	daveTap := newTapClient(t.t, dave)
+	erinTap := newTapClient(t.t, erin)
+	fabiaTap := newTapClient(t.t, fabia)
+
+
+	// Mint an asset on erin and sync all nodes to erin as the
+	// universe.
+	mintedAssets := itest.MintAssetsConfirmBatch(
+		t.t, t.lndHarness.Miner.Client, erinTap,
+		[]*mintrpc.MintAssetRequest{
+			{
+				Asset: itestAsset,
+			},
+		},
+	)
+	cents := mintedAssets[0]
+	assetID := cents.AssetGenesis.AssetId
+
+
+
+
+	t.Logf("Minted %d lightning cents, syncing universes...", cents.Amount)
+	syncUniverses(t.t, erinTap, dave, fabia)
+	t.Logf("Universes synced between all nodes, distributing assets...")
+
+	const (
+		erinFundingAmount = uint64(fundingAmount)
+	)
+
+
+	createMiniTestAssetNetwork(
+		t, net, daveTap, erinTap, fabiaTap, universeTap, cents, startAmount,
+		erinFundingAmount, DefaultPushSat)
+
+
+
+
+	// Before we start sending out payments, let's make sure each node can
+	// see the other one in the graph and has all required features.
+
+	require.NoError(t.t, t.lndHarness.AssertNodeKnown(erin, fabia))
+	require.NoError(t.t, t.lndHarness.AssertNodeKnown(erin, dave))
+
+	require.NoError(t.t, t.lndHarness.AssertNodeKnown(fabia, erin))
+	require.NoError(t.t, t.lndHarness.AssertNodeKnown(fabia, dave))
+
+	require.NoError(t.t, t.lndHarness.AssertNodeKnown(dave, erin))
+	// require.NoError(t.t, t.lndHarness.AssertNodeKnown(dave, fabia))
+
+	// Print initial channel balances.
+	logBalance(t.t, nodes, assetID, "initial")
+
+
+
+
+
+	const fabiaInvoiceAssetAmount2 = 6_000_000
+	invoiceResp := createAssetInvoice(
+		t.t, erin, fabia, fabiaInvoiceAssetAmount2, assetID,
+	)
+
+
+	// works with taproot-assets.experimental.rfq.mockoracleassetsperbtc=10000000000
+	payInvoiceWithSatoshi(t.t, dave, invoiceResp)
+
+
+	// works with taproot-assets.experimental.rfq.mockoracleassetsperbtc=9852216748 and taproot-assets.experimental.rfq.mockoracleassetsperbtc=10000000000
+	// payInvoiceWithSatoshi(t.t, dave, invoiceResp, withSmallShards())
+
+
+
+
+
+
+	logBalance(t.t, nodes, assetID, "after invoice")
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // testCustomChannelsLarge tests that we can create a network with custom
 // channels and send large asset payments over them.

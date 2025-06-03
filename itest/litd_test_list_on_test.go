@@ -24,6 +24,16 @@ var allTestCases = []*testCase{
 		name: "terminal large http header",
 		test: testLargeHttpHeader,
 	},
+
+
+	{
+		name:       "sharding problem",
+		test:       testSharding,
+	},
+
+
+
+
 	{
 		name:       "custom channels",
 		test:       testCustomChannels,
