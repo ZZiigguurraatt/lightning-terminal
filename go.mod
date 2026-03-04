@@ -1,6 +1,6 @@
 module github.com/lightninglabs/lightning-terminal
 
-go 1.24.11
+go 1.25.5
 
 require (
 	github.com/btcsuite/btcd v0.24.3-0.20250318170759-4f4ea81776d6
@@ -252,3 +252,5 @@ replace github.com/golang-migrate/migrate/v4 => github.com/lightninglabs/migrate
 
 // The upstream nhooyr.io/websocket repository has been moved to github.com/coder/websocket.
 replace nhooyr.io/websocket => github.com/coder/websocket v1.8.7
+
+replace github.com/lightningnetwork/lnd/sqldb => github.com/ziggie1984/lnd/sqldb v1.0.13-0.20260304172211-a8638022b947
